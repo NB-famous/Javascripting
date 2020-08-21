@@ -46,7 +46,7 @@ const updateUrl = (shortURL, longURL) => {
 };
 
 // Create a function that will tell if its users link or not
-const usersLink = function(object, id) {
+const usersLink = function (object, id) {
   let usersObject = {};
   for (let key in object) {
     if (object[key].userID === id) {
@@ -55,6 +55,7 @@ const usersLink = function(object, id) {
   }
   return usersObject;
 };
+
 app.get('/', (req, res) => {
   if (!req.session.user_id) {
     res.redirect('/login');
@@ -95,9 +96,9 @@ app.get('/login', (req, res) => {
     password: users[req.session.password],
     retype: users[req.session.retype],
   };
-  if(users[req.session.user_id]){
+  if (users[req.session.user_id]) {
     res.redirect('/urls')
-  }else{
+  } else {
     res.render("urls_login", templateVars);
   }
 });
@@ -109,36 +110,44 @@ app.get("/register", (req, res) => {
     shortURL: req.params.shortURL,
     longURL: urlDatabase[req.params.shortURL]
   };
-  if(users[req.session.user_id]){
+  if (users[req.session.user_id]) {
     res.redirect('/urls')
-  }else{
-     res.render("urls_registration", templateVars);
+  } else {
+    res.render("urls_registration", templateVars);
   }
 });
 
 // Adding a GET Route to Show the Form
 app.get("/urls/new", (req, res) => {
-  if (!req.session.user_id) {
+  const id = req.session.user_id;
+  const currentUser = users[req.session.user_id];
+  if (!id) {
     res.status(401).send("ERROR: You're not log in");
   }
-  let templateVars = {
-    user: users[req.session.user_id],
-    username: req.session.username,
-    urls: urlDatabase
-  };
-  res.render("urls_new", templateVars);
+  if (!currentUser) {
+    res.send("ERROR FOUND: Unauthorized user cannot proceed with this action");
+    return;
+  } else {
+    let templateVars = {
+      user: users[req.session.user_id],
+      username: req.session.username,
+      urls: urlDatabase
+    };
+    res.render("urls_new", templateVars);
+  }
 });
 
 // Adding a new route
 app.get("/urls/:shortURL", (req, res) => {
   if (!req.session.user_id) {
-    res.status(401).send("ERROR FOUND: This id does not belong to you...");
+    res.status(401).send("ERROR FOUND: Unauthorised user...");
     return;
   } else if (!urlDatabase[req.params.shortURL]) {
     res.status(404).send("ERROR FOUND: This url does not exist...");
   }
   if (!urlDatabase[req.params.shortURL]["longURL"]) {
     res.send('LongURL not found in database!');
+    return;
   }
   const id = req.session.user_id;
   const links = usersLink(urlDatabase, id);
@@ -147,7 +156,6 @@ app.get("/urls/:shortURL", (req, res) => {
     res.status(403).send("ERROR FOUND: This shortURL does not belong to this user......");
     return;
   }
-
   let templateVars = {
     user: users[req.session.user_id],
     username: req.session.username,
@@ -169,12 +177,20 @@ app.get("/u/:shortURL", (req, res) => {
 
 // Post that add new short url for user
 app.post("/urls", (req, res) => {
+  const currentUser = users[req.session.user_id];
   const longURL = req.body.longURL;
   const shortURL = genRanId();
-  urlDatabase[shortURL] = {
-    longURL: longURL,
-    userID: req.session.user_id
-  };
+  if (!currentUser) {
+    res.send("ERROR FOUND: Unauthorized...");
+    return;
+  } else {
+    urlDatabase[shortURL] = {
+      longURL: longURL,
+      userID: req.session.user_id
+    };
+    res.redirect('/urls');
+    return;
+  }
   res.redirect('/urls');
 });
 
@@ -196,7 +212,6 @@ app.post('/register', (req, res) => {
     res.status(400).send("400 ERROR FOUND:Invalid email or password combination...");
     return;
   }
-
   for (let val in users) {
     if (newData.email === users[val].email) {
       res.status(400).send("400 ERROR CODE FOUND: This email already exist, please try again...");
@@ -239,16 +254,32 @@ app.post("/logout", (req, res) => {
 // Add a POST route that removes a URL resource, update urls_index.ejs
 app.post("/urls/:shortURL/delete", (req, res) => {
   const urlId = req.params.shortURL;
-  delete urlDatabase[urlId];
-  res.redirect("/urls");
+  const id = req.session.user_id;
+  const links = usersLink(urlDatabase, id);
+  if (!links[urlId]) {
+    res.send("ERROR FOUND: Cannot delete what doesn't belong to you");
+    return;
+  } else {
+    delete urlDatabase[urlId];
+    res.redirect('/urls');
+    return;
+  }
 });
 
 // Add a post to edit form
 app.post("/urls/:shortURL", (req, res) => {
   const shortURL = req.params.shortURL;
   const longURL = req.body.fname;
-  updateUrl(shortURL, longURL);
-  res.redirect("/urls");
+  const id = req.session.user_id;
+  const links = usersLink(urlDatabase, id);
+  if (!links[shortURL]) {
+    res.send("ERROR FOUND: Unauthorized...");
+    return;
+  } else {
+    updateUrl(shortURL, longURL);
+    res.redirect("/urls");
+    return;
+  }
 });
 
 // Visual Cue that the server is listening.
